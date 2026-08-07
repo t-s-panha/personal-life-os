@@ -10,6 +10,8 @@ import { Clock, Play, Square, Plus, Trash2, Tag, Star, BarChart2 } from "lucide-
 import { formatDuration } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 
+import { useTimer } from "@/context/TimerContext";
+
 interface TimeEntry {
   id: string;
   category: string;
@@ -38,13 +40,24 @@ export default function TimePage() {
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Active Timer state
-  const [timerRunning, setTimerRunning] = useState(false);
+  // Global Timer Context
+  const {
+    activeTimer,
+    isRunning,
+    isPaused,
+    elapsedSeconds,
+    isSubmitting,
+    startTimer,
+    pauseTimer,
+    resumeTimer,
+    stopTimer,
+  } = useTimer();
+
+  // Local Form state for initializing new timer
   const [timerCategory, setTimerCategory] = useState("work");
   const [timerDesc, setTimerDesc] = useState("");
   const [timerTaskId, setTimerTaskId] = useState("");
   const [timerProjectId, setTimerProjectId] = useState("");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Manual entry form state
   const [form, setForm] = useState({
@@ -77,53 +90,23 @@ export default function TimePage() {
     fetchEntries();
   }, [fetchEntries]);
 
-  // Live timer interval
-  useEffect(() => {
-    let interval: any = null;
-    if (timerRunning) {
-      interval = setInterval(() => {
-        setElapsedSeconds((prev) => prev + 1);
-      }, 1000);
-    } else if (!timerRunning && elapsedSeconds !== 0) {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  }, [timerRunning, elapsedSeconds]);
-
   const handleStartTimer = () => {
-    setElapsedSeconds(0);
-    setTimerRunning(true);
+    if (activeTimer) return;
+    startTimer({
+      category: timerCategory,
+      description: timerDesc.trim() || undefined,
+      taskId: timerTaskId || null,
+      projectId: timerProjectId || null,
+    });
   };
 
   const handleStopTimer = async () => {
-    setTimerRunning(false);
-    if (elapsedSeconds < 5) return;
-
-    try {
-      const now = new Date();
-      const start = new Date(now.getTime() - elapsedSeconds * 1000);
-
-      await fetch("/api/time", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category: timerCategory,
-          description: timerDesc || "Live focus session",
-          startTime: start.toISOString(),
-          endTime: now.toISOString(),
-          duration: elapsedSeconds,
-          taskId: timerTaskId || null,
-          projectId: timerProjectId || null,
-        }),
-      });
-
+    const success = await stopTimer();
+    if (success) {
       setTimerDesc("");
       setTimerTaskId("");
       setTimerProjectId("");
-      setElapsedSeconds(0);
       fetchEntries();
-    } catch (err) {
-      console.error("Failed to save timer entry", err);
     }
   };
 
@@ -201,15 +184,15 @@ export default function TimePage() {
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Input
                   placeholder="What are you working on right now?"
-                  value={timerDesc}
+                  value={activeTimer ? activeTimer.description : timerDesc}
                   onChange={(e) => setTimerDesc(e.target.value)}
-                  disabled={timerRunning}
+                  disabled={Boolean(activeTimer)}
                   className="bg-white/10 border-white/20 text-white placeholder:text-white/50"
                 />
                 <Select
-                  value={timerCategory}
+                  value={activeTimer ? activeTimer.category : timerCategory}
                   onChange={(e) => setTimerCategory(e.target.value)}
-                  disabled={timerRunning}
+                  disabled={Boolean(activeTimer)}
                   className="bg-white/10 border-white/20 text-white"
                 >
                   {CATEGORIES.map((cat) => (
@@ -219,9 +202,9 @@ export default function TimePage() {
                   ))}
                 </Select>
                 <Select
-                  value={timerTaskId}
+                  value={activeTimer ? activeTimer.taskId || "" : timerTaskId}
                   onChange={(e) => setTimerTaskId(e.target.value)}
-                  disabled={timerRunning}
+                  disabled={Boolean(activeTimer)}
                   className="bg-white/10 border-white/20 text-white"
                 >
                   <option value="" className="text-slate-900">-- Link Task (Optional) --</option>
@@ -234,15 +217,34 @@ export default function TimePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-6">
-              <span className="text-4xl sm:text-5xl font-mono font-bold tracking-wider">
-                {formatDuration(elapsedSeconds)}
-              </span>
+            <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6">
+              <div className="text-center sm:text-right">
+                <span className="text-4xl sm:text-5xl font-mono font-bold tracking-wider">
+                  {formatDuration(elapsedSeconds)}
+                </span>
+                {isPaused && <p className="text-xs text-amber-400 font-semibold tracking-wide">PAUSED</p>}
+              </div>
 
-              {timerRunning ? (
-                <Button onClick={handleStopTimer} size="lg" variant="destructive" className="flex items-center gap-2">
-                  <Square className="w-5 h-5" /> Stop & Save
-                </Button>
+              {activeTimer ? (
+                <div className="flex items-center gap-2">
+                  <Button
+                    onClick={isPaused ? resumeTimer : pauseTimer}
+                    size="lg"
+                    variant="outline"
+                    className="bg-white/10 hover:bg-white/20 text-white border-white/20"
+                  >
+                    {isPaused ? "Resume" : "Pause"}
+                  </Button>
+                  <Button
+                    onClick={handleStopTimer}
+                    size="lg"
+                    variant="destructive"
+                    disabled={isSubmitting}
+                    className="flex items-center gap-2"
+                  >
+                    <Square className="w-5 h-5 fill-current" /> Stop & Save
+                  </Button>
+                </div>
               ) : (
                 <Button onClick={handleStartTimer} size="lg" className="bg-emerald-500 hover:bg-emerald-600 text-white flex items-center gap-2">
                   <Play className="w-5 h-5 fill-current" /> Start Timer

@@ -21,6 +21,9 @@ const habitLogSchema = z.object({
   completed: z.boolean(),
 });
 
+import { calculateHabitStreaks } from "@/lib/habits";
+import { getZonedStartOfDay } from "@/lib/timezone";
+
 export async function GET(req: Request) {
   try {
     const session = await getServerSession(authOptions);
@@ -28,25 +31,32 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { searchParams } = new URL(req.url);
-    const dateParam = searchParams.get("date");
-    const targetDate = dateParam ? new Date(dateParam) : new Date();
-    const dayStart = startOfDay(targetDate);
-
-    // Get 7 days window for weekly view context
-    const sevenDaysAgo = subDays(dayStart, 6);
-
     const habits = await prisma.habit.findMany({
       where: { userId: session.user.id, isActive: true },
       include: {
         logs: {
-          where: { date: { gte: sevenDaysAgo } },
+          where: { completed: true },
+          orderBy: { date: "desc" },
         },
       },
       orderBy: { order: "asc" },
     });
 
-    return NextResponse.json(habits);
+    const enrichedHabits = habits.map((habit) => {
+      const { currentStreak, longestStreak, totalCompletions } = calculateHabitStreaks(
+        habit.logs,
+        habit.targetDays
+      );
+
+      return {
+        ...habit,
+        currentStreak,
+        longestStreak,
+        totalCompletions,
+      };
+    });
+
+    return NextResponse.json(enrichedHabits);
   } catch (error) {
     console.error("GET /api/habits error:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
@@ -65,27 +75,49 @@ export async function POST(req: Request) {
     // Check if logging completion vs creating habit
     if (body.habitId && body.completed !== undefined) {
       const { habitId, date, completed } = habitLogSchema.parse(body);
-      const logDate = startOfDay(new Date(date));
+      
+      // Parse canonical YYYY-MM-DD as UTC midnight
+      const [year, month, day] = date.split("T")[0].split("-").map(Number);
+      const canonicalDate = new Date(Date.UTC(year, month - 1, day, 0, 0, 0, 0));
 
-      const log = await prisma.habitLog.upsert({
-        where: { habitId_date: { habitId, date: logDate } },
-        update: { completed, count: completed ? 1 : 0 },
-        create: { habitId, userId: session.user.id, date: logDate, completed, count: completed ? 1 : 0 },
-      });
+      if (completed) {
+        // Toggle ON: Upsert completed log
+        await prisma.habitLog.upsert({
+          where: { habitId_date: { habitId, date: canonicalDate } },
+          update: { completed: true, count: 1 },
+          create: { habitId, userId: session.user.id, date: canonicalDate, completed: true, count: 1 },
+        });
+      } else {
+        // Toggle OFF: Delete log record completely to prevent stale DB state
+        await prisma.habitLog.deleteMany({
+          where: { habitId, date: canonicalDate },
+        });
+      }
 
-      // Recalculate streak/stats
+      // Recalculate authoritative streak/stats from DB
       const logs = await prisma.habitLog.findMany({
         where: { habitId, completed: true },
         orderBy: { date: "desc" },
       });
       const totalCompletions = logs.length;
 
+      const habit = await prisma.habit.findUnique({ where: { id: habitId } });
+      const { currentStreak, longestStreak } = calculateHabitStreaks(logs, habit?.targetDays);
+
       await prisma.habit.update({
         where: { id: habitId },
-        data: { totalCompletions },
+        data: { totalCompletions, currentStreak },
       });
 
-      return NextResponse.json(log);
+      return NextResponse.json({
+        habitId,
+        date: date.split("T")[0],
+        completed,
+        currentStreak,
+        longestStreak,
+        totalCompletions,
+        logs,
+      });
     }
 
     // Creating new habit

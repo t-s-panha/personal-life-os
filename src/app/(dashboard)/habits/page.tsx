@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Plus, Repeat, CheckCircle2, Circle, Flame, Calendar, Trash2, TrendingUp } from "lucide-react";
-import { format, subDays, startOfDay, isSameDay } from "date-fns";
+import { getZonedDateString, getZonedDate } from "@/lib/timezone";
+import { parseTargetDays } from "@/lib/habits";
 import { cn } from "@/lib/utils";
 
 interface HabitLog {
@@ -23,6 +24,7 @@ interface Habit {
   description: string | null;
   category: string;
   frequency: string;
+  targetDays?: string | null;
   currentStreak: number;
   longestStreak: number;
   totalCompletions: number;
@@ -33,6 +35,7 @@ export default function HabitsPage() {
   const [habits, setHabits] = useState<Habit[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [pendingKey, setPendingKey] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     name: "",
@@ -41,7 +44,13 @@ export default function HabitsPage() {
     frequency: "DAILY",
   });
 
-  const last7Days = Array.from({ length: 7 }, (_, i) => subDays(startOfDay(new Date()), 6 - i));
+  const nowZoned = getZonedDate(new Date());
+  const todayStr = getZonedDateString(new Date());
+
+  // Generate the last 7 calendar days in Phnom Penh timezone
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    return new Date(nowZoned.getTime() - (6 - i) * 86400000);
+  });
 
   const fetchHabits = useCallback(async () => {
     try {
@@ -80,20 +89,42 @@ export default function HabitsPage() {
   };
 
   const toggleLog = async (habitId: string, date: Date, currentCompleted: boolean) => {
-    const dateStr = date.toISOString().split("T")[0];
+    const dateStr = getZonedDateString(date);
+    if (dateStr > todayStr) return; // Future days disabled
 
-    // Optimistic update
+    const key = `${habitId}_${dateStr}`;
+    if (pendingKey === key) return; // Lock rapid double-taps
+    setPendingKey(key);
+
+    const nextCompleted = !currentCompleted;
+
+    // Optimistic UI update
     setHabits((prev) =>
       prev.map((h) => {
         if (h.id !== habitId) return h;
-        const updatedLogs = [...h.logs];
-        const existingIdx = updatedLogs.findIndex((l) => isSameDay(new Date(l.date), date));
-        if (existingIdx >= 0) {
-          updatedLogs[existingIdx] = { ...updatedLogs[existingIdx], completed: !currentCompleted };
+        let updatedLogs = [...(h.logs || [])];
+
+        if (nextCompleted) {
+          // Add optimistic log if not already present
+          if (!updatedLogs.some((l) => getZonedDateString(l.date) === dateStr)) {
+            updatedLogs.push({ id: Math.random().toString(), date: dateStr, completed: true });
+          } else {
+            updatedLogs = updatedLogs.map((l) =>
+              getZonedDateString(l.date) === dateStr ? { ...l, completed: true } : l
+            );
+          }
         } else {
-          updatedLogs.push({ id: Math.random().toString(), date: dateStr, completed: true });
+          // Filter out uncompleted log
+          updatedLogs = updatedLogs.filter((l) => getZonedDateString(l.date) !== dateStr);
         }
-        return { ...h, logs: updatedLogs };
+
+        const newTotal = updatedLogs.filter((l) => l.completed).length;
+
+        return {
+          ...h,
+          logs: updatedLogs,
+          totalCompletions: nextCompleted ? h.totalCompletions + 1 : Math.max(0, h.totalCompletions - 1),
+        };
       })
     );
 
@@ -104,17 +135,33 @@ export default function HabitsPage() {
         body: JSON.stringify({
           habitId,
           date: dateStr,
-          completed: !currentCompleted,
+          completed: nextCompleted,
         }),
       });
 
-      if (!res.ok) {
-        // Revert on API failure
+      if (res.ok) {
+        const data = await res.json();
+        // Replace with authoritative server calculated values
+        setHabits((prev) =>
+          prev.map((h) => {
+            if (h.id !== habitId) return h;
+            return {
+              ...h,
+              currentStreak: data.currentStreak,
+              longestStreak: data.longestStreak,
+              totalCompletions: data.totalCompletions,
+              logs: data.logs || h.logs,
+            };
+          })
+        );
+      } else {
         fetchHabits();
       }
     } catch (err) {
       console.error("Toggle habit log failed", err);
       fetchHabits();
+    } finally {
+      setPendingKey(null);
     }
   };
 
@@ -226,65 +273,85 @@ export default function HabitsPage() {
             </div>
           </CardHeader>
           <CardContent className="p-0 divide-y">
-            {habits.map((habit) => (
-              <div key={habit.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-accent/30 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
-                    <Repeat className="w-5 h-5" />
+            {habits.map((habit) => {
+              const targetDays = parseTargetDays(habit.targetDays);
+
+              return (
+                <div key={habit.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-accent/30 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
+                      <Repeat className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm">{habit.name}</p>
+                        <Badge variant="outline" className="text-[10px] uppercase px-1.5 py-0">
+                          {habit.category}
+                        </Badge>
+                      </div>
+                      {habit.description && <p className="text-xs text-muted-foreground">{habit.description}</p>}
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
+                        <span className="flex items-center gap-1 text-amber-600 font-medium">
+                          <Flame className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> {habit.currentStreak || 0} day streak
+                        </span>
+                        {habit.longestStreak > 0 && (
+                          <span className="text-muted-foreground font-medium">Best: {habit.longestStreak}</span>
+                        )}
+                        <span>Total: {habit.totalCompletions || 0}</span>
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-sm">{habit.name}</p>
-                      <Badge variant="outline" className="text-[10px] uppercase px-1.5 py-0">
-                        {habit.category}
-                      </Badge>
+
+                  {/* 7-day checkboxes */}
+                  <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0">
+                    <div className="flex items-center gap-1.5 sm:gap-2">
+                      {last7Days.map((day) => {
+                        const dayStr = getZonedDateString(day);
+                        const isFuture = dayStr > todayStr;
+                        const isToday = dayStr === todayStr;
+                        const dayOfWeek = day.getUTCDay();
+                        const isScheduled = targetDays.includes(dayOfWeek);
+
+                        const log = habit.logs?.find((l) => getZonedDateString(l.date) === dayStr);
+                        const isCompleted = Boolean(log?.completed);
+
+                        const weekdayLabel = ["S", "M", "T", "W", "T", "F", "S"][dayOfWeek];
+                        const dateNum = dayStr.split("-")[2];
+
+                        return (
+                          <button
+                            key={dayStr}
+                            disabled={isFuture}
+                            onClick={() => toggleLog(habit.id, day, isCompleted)}
+                            className={cn(
+                              "w-8 h-9 rounded-lg flex flex-col items-center justify-center transition-all text-[10px] font-medium border touch-manipulation",
+                              isCompleted
+                                ? "bg-emerald-500 text-white border-emerald-600 shadow-sm"
+                                : isFuture
+                                ? "bg-muted/40 text-muted-foreground/30 border-transparent cursor-not-allowed opacity-40"
+                                : isScheduled
+                                ? "bg-background hover:bg-accent text-muted-foreground border-muted"
+                                : "bg-muted/20 text-muted-foreground/50 border-transparent",
+                              isToday && !isCompleted && "border-primary font-bold ring-1 ring-primary/40"
+                            )}
+                            title={`${dayStr} (${weekdayLabel}): ${isFuture ? "Future date" : isCompleted ? "Completed" : isScheduled ? "Scheduled" : "Off-schedule"}`}
+                          >
+                            <span className="text-[9px] opacity-75 leading-none">{weekdayLabel}</span>
+                            <span className="text-[9px] font-bold mt-0.5 leading-none">{dateNum}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {habit.description && <p className="text-xs text-muted-foreground">{habit.description}</p>}
-                    <div className="flex items-center gap-3 text-xs text-muted-foreground mt-1">
-                      <span className="flex items-center gap-1 text-amber-600 font-medium">
-                        <Flame className="w-3.5 h-3.5 fill-amber-500 text-amber-500" /> {habit.currentStreak || 0} day streak
-                      </span>
-                      <span>Total: {habit.totalCompletions}</span>
-                    </div>
+                    <button
+                      onClick={() => handleDelete(habit.id)}
+                      className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive ml-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-
-                {/* 7-day checkboxes */}
-                <div className="flex items-center justify-between sm:justify-end gap-2 pt-2 sm:pt-0 border-t sm:border-t-0">
-                  <div className="flex items-center gap-2">
-                    {last7Days.map((day) => {
-                      const log = habit.logs.find((l) => isSameDay(new Date(l.date), day));
-                      const isCompleted = !!log?.completed;
-                      const isToday = isSameDay(day, new Date());
-
-                      return (
-                        <button
-                          key={day.toISOString()}
-                          onClick={() => toggleLog(habit.id, day, isCompleted)}
-                          className={cn(
-                            "w-8 h-8 rounded-lg flex flex-col items-center justify-center transition-all text-[10px] font-medium border",
-                            isCompleted
-                              ? "bg-emerald-500 text-white border-emerald-600 shadow-sm"
-                              : "bg-background hover:bg-accent text-muted-foreground border-muted",
-                            isToday && !isCompleted && "border-primary font-bold"
-                          )}
-                          title={`${format(day, "EEE, MMM d")}: ${isCompleted ? "Completed" : "Not completed"}`}
-                        >
-                          <span className="text-[9px] opacity-80">{format(day, "EEE")[0]}</span>
-                          {isCompleted ? <CheckCircle2 className="w-3.5 h-3.5" /> : <Circle className="w-3 h-3 opacity-40" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <button
-                    onClick={() => handleDelete(habit.id)}
-                    className="p-1.5 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive ml-2"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </CardContent>
         </Card>
       )}
