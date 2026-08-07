@@ -4842,7 +4842,7 @@ snapshots:
       oauth: 0.9.15
       openid-client: 5.7.1
       preact: 10.29.8(preact-render-to-string@5.2.6)
-      preact-render-to-string: 5.2.6(preact@10.24.3)
+      preact-render-to-string: 5.2.6(preact@10.29.8)
       react: 18.3.1
       react-dom: 18.3.1(react@18.3.1)
       uuid: 11.1.1
@@ -5045,9 +5045,9 @@ snapshots:
       picocolors: 1.1.1
       source-map-js: 1.2.1
 
-  preact-render-to-string@5.2.6(preact@10.24.3):
+  preact-render-to-string@5.2.6(preact@10.29.8):
     dependencies:
-      preact: 10.24.3
+      preact: 10.29.8(preact-render-to-string@5.2.6)
       pretty-format: 3.8.0
 
   preact-render-to-string@6.5.11(preact@10.24.3):
@@ -5058,7 +5058,7 @@ snapshots:
 
   preact@10.29.8(preact-render-to-string@5.2.6):
     optionalDependencies:
-      preact-render-to-string: 5.2.6(preact@10.24.3)
+      preact-render-to-string: 5.2.6(preact@10.29.8)
 
   prelude-ls@1.2.1: {}
 
