@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { QuickEntryModal } from "@/components/QuickEntryModal";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { signOut } from "next-auth/react";
 import {
   Menu,
   LayoutDashboard,
@@ -23,7 +24,7 @@ import {
   ClipboardList,
   BarChart3,
   Settings,
-  X,
+  LogOut,
 } from "lucide-react";
 
 const navItems = [
@@ -73,11 +74,17 @@ export function Header({ user }: { user: any }) {
 
       {/* MOBILE NAVIGATION DRAWER */}
       <Dialog open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
-        <DialogContent className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] h-full p-0 bg-card border-r shadow-xl translate-x-0 sm:max-w-xs rounded-none">
-          <DialogHeader className="p-4 border-b flex flex-row items-center justify-between">
-            <DialogTitle className="text-lg font-bold">Life OS Navigation</DialogTitle>
+        <DialogContent className="fixed inset-y-0 left-0 top-0 translate-x-0 translate-y-0 z-50 flex flex-col w-72 max-w-[85vw] h-dvh max-h-dvh p-0 bg-card border-r shadow-2xl rounded-none border-t-0 border-b-0 border-l-0">
+          {/* Drawer Header (Fixed) */}
+          <DialogHeader className="p-4 border-b shrink-0 flex flex-row items-center justify-between">
+            <div>
+              <DialogTitle className="text-lg font-bold">Life OS</DialogTitle>
+              <p className="text-xs text-muted-foreground">Personal Operating System</p>
+            </div>
           </DialogHeader>
-          <div className="p-3 space-y-1 overflow-y-auto max-h-[calc(100vh-60px)]">
+
+          {/* Drawer Navigation List (Scrollable flex-1) */}
+          <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3 space-y-1">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
@@ -97,6 +104,28 @@ export function Header({ user }: { user: any }) {
                 </Link>
               );
             })}
+          </div>
+
+          {/* Drawer Footer (Fixed Sign Out & User Info) */}
+          <div className="p-3 border-t shrink-0 bg-card/95 backdrop-blur space-y-2">
+            <div className="flex items-center gap-2.5 px-2 py-1">
+              <div className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                {user?.name?.[0] || user?.email?.[0] || "?"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold truncate">{user?.name || user?.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={() => {
+                setMobileNavOpen(false);
+                signOut({ callbackUrl: "/login" });
+              }}
+              className="flex items-center gap-3 px-3 py-2 w-full rounded-lg text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors touch-manipulation min-h-[40px]"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Sign Out</span>
+            </button>
           </div>
         </DialogContent>
       </Dialog>
