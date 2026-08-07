@@ -207,7 +207,7 @@ export default function DashboardPage() {
                 View all <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
-            {data.topTasks.length === 0 ? (
+            {(!data.topTasks || data.topTasks.length === 0) ? (
               <p className="text-muted-foreground text-sm">No tasks for today. <Link href="/tasks" className="text-primary hover:underline">Add some!</Link></p>
             ) : (
               <div className="space-y-3">
@@ -234,7 +234,7 @@ export default function DashboardPage() {
                 All <ArrowRight className="w-3 h-3" />
               </Link>
             </div>
-            {data.todayHabits.length === 0 ? (
+            {(!data.todayHabits || data.todayHabits.length === 0) ? (
               <p className="text-muted-foreground text-sm">No habits yet.</p>
             ) : (
               <div className="space-y-3">
