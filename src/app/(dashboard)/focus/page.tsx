@@ -116,6 +116,17 @@ export default function FocusPage() {
         console.error("Save focus session failed", err);
       }
 
+      // Safe notification trigger for mobile/desktop browsers
+      if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+        try {
+          new Notification("Focus Session Complete! 🎉", {
+            body: `Great job completing ${activePreset.label}! Take a break.`,
+          });
+        } catch {
+          // Ignore notification error on mobile browsers
+        }
+      }
+
       // Switch to break
       setMode("break");
       setTimeLeft(activePreset.break);

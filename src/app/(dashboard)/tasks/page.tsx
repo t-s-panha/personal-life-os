@@ -616,18 +616,32 @@ export default function TasksPage() {
                                 </span>
                               )}
                             </div>
-                            <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 transition-opacity">
+                            <div className="flex items-center gap-1 transition-opacity opacity-100 sm:opacity-0 sm:group-hover:opacity-100">
+                              <select
+                                value={task.status}
+                                onChange={(e) => handleStatusChange(task.id, e.target.value as Task["status"])}
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-[10px] p-0.5 border rounded bg-background text-muted-foreground touch-manipulation cursor-pointer"
+                                title="Move status"
+                              >
+                                <option value="BACKLOG">Backlog</option>
+                                <option value="PLANNED">Planned</option>
+                                <option value="IN_PROGRESS">In Progress</option>
+                                <option value="COMPLETED">Completed</option>
+                              </select>
                               <button
                                 onClick={() => openEdit(task)}
-                                className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground"
+                                className="p-1 hover:bg-accent rounded text-muted-foreground hover:text-foreground touch-manipulation min-h-[28px] min-w-[28px]"
+                                title="Edit"
                               >
-                                <Edit2 className="w-3 h-3" />
+                                <Edit2 className="w-3.5 h-3.5" />
                               </button>
                               <button
                                 onClick={() => handleDelete(task.id)}
-                                className="p-1 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive"
+                                className="p-1 hover:bg-destructive/10 rounded text-muted-foreground hover:text-destructive touch-manipulation min-h-[28px] min-w-[28px]"
+                                title="Delete"
                               >
-                                <Trash2 className="w-3 h-3" />
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </div>
                           </div>

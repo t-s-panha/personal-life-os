@@ -503,6 +503,18 @@ export function calculateDisciplineScore(
   ranges: DateRangeBoundaries,
   prevScore?: number | null
 ): DisciplineScoreResult {
+  if (!ranges) {
+    return {
+      score: null,
+      status: "insufficient_data",
+      previousScore: prevScore ?? null,
+      change: null,
+      breakdown: null,
+      activeWeights: null,
+      explanation: "Insufficient routine tracking to compute Discipline Score.",
+    };
+  }
+
   const habitsScore = calculateScheduleAwareHabitScore(habitLogs, activeHabitsList, ranges);
   const taskFollowThroughScore = calculateTaskFollowThroughScore(tasks);
   const studyConsistencyScore = calculateStudyConsistencyScore(studySessions, ranges.periodDays);

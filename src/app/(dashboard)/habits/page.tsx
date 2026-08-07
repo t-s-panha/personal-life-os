@@ -98,7 +98,7 @@ export default function HabitsPage() {
     );
 
     try {
-      await fetch("/api/habits", {
+      const res = await fetch("/api/habits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -107,9 +107,14 @@ export default function HabitsPage() {
           completed: !currentCompleted,
         }),
       });
-      fetchHabits();
+
+      if (!res.ok) {
+        // Revert on API failure
+        fetchHabits();
+      }
     } catch (err) {
       console.error("Toggle habit log failed", err);
+      fetchHabits();
     }
   };
 

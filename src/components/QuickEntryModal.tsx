@@ -117,17 +117,56 @@ export function QuickEntryModal() {
     }
   };
 
+  // Time state
+  const [timeDesc, setTimeDesc] = useState("");
+  const [timeMinutes, setTimeMinutes] = useState(30);
+
+  // Study state
+  const [studySubject, setStudySubject] = useState("");
+  const [studyMinutes, setStudyMinutes] = useState(45);
+
+  const handleLogTime = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!timeDesc.trim()) return;
+    setLoading(true);
+    try {
+      const durationSec = Number(timeMinutes) * 60;
+      const end = new Date();
+      const start = new Date(end.getTime() - durationSec * 1000);
+      const res = await fetch("/api/time", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: timeDesc.trim(),
+          category: "work",
+          startTime: start.toISOString(),
+          endTime: end.toISOString(),
+          duration: durationSec,
+        }),
+      });
+      if (res.ok) {
+        setStatusMsg("Time logged!");
+        setTimeDesc("");
+        setTimeout(() => setOpen(false), 800);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <>
       <Button
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="hidden sm:flex items-center gap-2 text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-lg border bg-card/60"
+        className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground h-9 px-2.5 rounded-lg border bg-card/60 touch-manipulation"
       >
-        <Command className="w-3.5 h-3.5" />
-        <span>Quick Entry</span>
-        <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100">
+        <Zap className="w-4 h-4 text-primary" />
+        <span className="font-medium">Quick Entry</span>
+        <kbd className="hidden md:inline-flex pointer-events-none h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-[10px] font-medium opacity-100 ml-1">
           <span className="text-xs">⌘</span>K
         </kbd>
       </Button>
@@ -140,14 +179,15 @@ export function QuickEntryModal() {
               <span>Quick Capture</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Fast entry across tasks, focus timers, and journal notes.
+              Fast entry across tasks, focus timers, time logs, and journal notes.
             </DialogDescription>
           </DialogHeader>
 
           <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-2 space-y-4">
-            <TabsList className="grid grid-cols-3 h-8 text-xs">
+            <TabsList className="grid grid-cols-4 h-8 text-xs">
               <TabsTrigger value="task" className="text-xs">Task</TabsTrigger>
               <TabsTrigger value="focus" className="text-xs">Focus</TabsTrigger>
+              <TabsTrigger value="time" className="text-xs">Time</TabsTrigger>
               <TabsTrigger value="note" className="text-xs">Journal</TabsTrigger>
             </TabsList>
 
@@ -206,6 +246,33 @@ export function QuickEntryModal() {
                 </div>
                 <Button type="submit" disabled={loading} className="w-full text-xs h-8 mt-2 bg-emerald-600 hover:bg-emerald-700">
                   <Zap className="w-3.5 h-3.5 mr-1" /> Start 25m Focus Session
+                </Button>
+              </form>
+            </TabsContent>
+
+            {/* QUICK TIME TAB */}
+            <TabsContent value="time">
+              <form onSubmit={handleLogTime} className="space-y-3">
+                <Input
+                  placeholder="Activity description..."
+                  value={timeDesc}
+                  onChange={(e) => setTimeDesc(e.target.value)}
+                  className="text-xs h-9"
+                  autoFocus
+                />
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">Duration (minutes)</span>
+                  <Input
+                    type="number"
+                    min="5"
+                    max="480"
+                    value={timeMinutes}
+                    onChange={(e) => setTimeMinutes(Number(e.target.value))}
+                    className="w-24 text-xs h-8"
+                  />
+                </div>
+                <Button type="submit" disabled={loading || !timeDesc.trim()} className="w-full text-xs h-8 mt-2">
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Log Time Entry
                 </Button>
               </form>
             </TabsContent>
