@@ -1,0 +1,1214 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// CORE USER & AUTH
+// ============================================
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  password      String?   // For credentials provider
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts      Account[]
+  sessions      Session[]
+  profile       Profile?
+
+  // Core tracking
+  tasks         Task[]
+  goals         Goal[]
+  habits        Habit[]
+  habitLogs     HabitLog[]
+  timeEntries   TimeEntry[]
+  focusSessions FocusSession[]
+
+  // Education
+  subjects      Subject[]
+  skills        Skill[]
+  courses       Course[]
+  studySessions StudySession[]
+
+  // Fitness & Health
+  workouts      Workout[]
+  exercises     Exercise[]
+  sleepRecords  SleepRecord[]
+  moodRecords   MoodRecord[]
+
+  // Personal Development
+  journalEntries JournalEntry[]
+  books         Book[]
+  readingSessions ReadingSession[]
+  projects      Project[]
+
+  // Finance
+  expenses      Expense[]
+  incomes       Income[]
+
+  // Reviews
+  dailyReviews  DailyReview[]
+  weeklyReviews WeeklyReview[]
+  monthlyReviews MonthlyReview[]
+
+  // Gamification
+  achievements  UserAchievement[]
+
+  // Settings
+  settings      UserSettings?
+
+  // Notifications
+  notifications Notification[]
+  reminders     Reminder[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================
+// PROFILE
+// ============================================
+model Profile {
+  id          String   @id @default(cuid())
+  userId      String   @unique @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  displayName String?  @map("display_name")
+  bio         String?
+  timezone    String   @default("UTC")
+  language    String   @default("en")
+  dateFormat  String   @default("YYYY-MM-DD") @map("date_format")
+  timeFormat  String   @default("24h") @map("time_format")
+
+  // Onboarding data
+  mainGoals   String?  @map("main_goals") // JSON array
+  education   String?
+  careerGoals String?  @map("career_goals")
+  fitnessGoals String? @map("fitness_goals")
+  typicalSchedule String? @map("typical_schedule")
+  sleepTarget Float    @default(8.0) @map("sleep_target")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("profiles")
+}
+
+// ============================================
+// USER SETTINGS
+// ============================================
+model UserSettings {
+  id                    String   @id @default(cuid())
+  userId                String   @unique @map("user_id")
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Appearance
+  theme                 String   @default("system") // light, dark, system
+  sidebarCollapsed      Boolean  @default(false) @map("sidebar_collapsed")
+  dashboardLayout       String?  @map("dashboard_layout") // JSON
+
+  // Scoring weights (JSON)
+  disciplineWeights     String   @default("{\"tasks\":25,\"habits\":20,\"focus\":15,\"study\":15,\"exercise\":10,\"sleep\":10,\"review\":5}") @map("discipline_weights")
+  productivityWeights   String   @default("{\"importantTasks\":30,\"deepWork\":25,\"focusHours\":20,\"goalProgress\":15,\"plannedVsActual\":10}") @map("productivity_weights")
+
+  // Notifications
+  emailNotifications    Boolean  @default(true) @map("email_notifications")
+  pushNotifications     Boolean  @default(true) @map("push_notifications")
+  reminderTime          String   @default("09:00") @map("reminder_time")
+
+  // Privacy
+  dataRetentionDays     Int      @default(3650) @map("data_retention_days") // 10 years default
+
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@map("user_settings")
+}
+
+// ============================================
+// TASKS
+// ============================================
+model Task {
+  id              String     @id @default(cuid())
+  userId          String     @map("user_id")
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?
+  priority        Int        @default(2) // 1=Low, 2=Medium, 3=High, 4=Urgent
+  status          TaskStatus @default(BACKLOG)
+
+  dueDate         DateTime?  @map("due_date")
+  startDate       DateTime?  @map("start_date")
+  completedAt     DateTime?  @map("completed_at")
+
+  estimatedDuration Int?     @map("estimated_duration") // minutes
+  actualDuration   Int?      @map("actual_duration") // minutes
+
+  category        String?
+  tags            String[]   // Array of tags
+
+  // Relationships
+  projectId       String?    @map("project_id")
+  project         Project?   @relation(fields: [projectId], references: [id])
+  goalId          String?    @map("goal_id")
+  goal            Goal?      @relation(fields: [goalId], references: [id])
+
+  // Subtasks
+  parentId        String?    @map("parent_id")
+  parent          Task?      @relation("TaskSubtasks", fields: [parentId], references: [id])
+  subtasks        Task[]     @relation("TaskSubtasks")
+
+  // Recurring
+  recurrenceRule  String?    @map("recurrence_rule") // RRULE format
+  recurrenceEnd   DateTime?  @map("recurrence_end")
+
+  // Ordering
+  order           Int        @default(0)
+
+  // Time tracking
+  timeEntries     TimeEntry[]
+
+  notes           String?
+
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@index([userId, dueDate])
+  @@index([userId, priority])
+  @@map("tasks")
+}
+
+enum TaskStatus {
+  BACKLOG
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+// ============================================
+// GOALS (HIERARCHICAL)
+// ============================================
+model Goal {
+  id          String     @id @default(cuid())
+  userId      String     @map("user_id")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+
+  // Hierarchy
+  parentId    String?    @map("parent_id")
+  parent      Goal?      @relation("GoalHierarchy", fields: [parentId], references: [id])
+  children    Goal[]     @relation("GoalHierarchy")
+
+  // Timeframe
+  timeframe   GoalTimeframe @default(MONTHLY)
+  startDate   DateTime   @map("start_date")
+  targetDate  DateTime   @map("target_date")
+
+  // Progress
+  targetValue Float      @default(100) @map("target_value")
+  currentValue Float     @default(0) @map("current_value")
+  progress    Float      @default(0) // 0-100, auto-calculated
+
+  // Health
+  health      GoalHealth @default(NOT_STARTED)
+  healthOverride String? @map("health_override")
+
+  // Relationships
+  tasks       Task[]
+  habits      Habit[]
+  projects    Project[]
+  milestones  Milestone[]
+
+  // Metrics
+  metricType  String?    @map("metric_type") // hours, count, percentage, etc.
+  metricUnit  String?    @map("metric_unit")
+
+  // Categories
+  category    String     @default("personal") // education, fitness, career, finance, personal
+
+  isArchived  Boolean    @default(false) @map("is_archived")
+
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@index([userId, timeframe])
+  @@index([userId, health])
+  @@map("goals")
+}
+
+enum GoalTimeframe {
+  VISION
+  YEAR_3_5
+  ANNUAL
+  QUARTERLY
+  MONTHLY
+  WEEKLY
+  DAILY
+}
+
+enum GoalHealth {
+  NOT_STARTED
+  ON_TRACK
+  AT_RISK
+  BEHIND
+  COMPLETED
+}
+
+model Milestone {
+  id          String   @id @default(cuid())
+  goalId      String   @map("goal_id")
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  targetDate  DateTime @map("target_date")
+  completedAt DateTime? @map("completed_at")
+  order       Int      @default(0)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("milestones")
+}
+
+// ============================================
+// HABITS
+// ============================================
+model Habit {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name          String
+  description   String?
+  category      String      @default("general") // fitness, study, health, productivity, etc.
+
+  // Frequency
+  frequency     HabitFrequency @default(DAILY)
+  targetDays    String?     @map("target_days") // JSON array [1,2,3,4,5] for Mon-Fri
+  targetCount   Int         @default(1) @map("target_count") // For quantity-based habits
+
+  // Reminder
+  reminderTime  String?     @map("reminder_time") // HH:mm
+  reminderDays  String?     @map("reminder_days") // JSON array
+
+  // Relationships
+  goalId        String?     @map("goal_id")
+  goal          Goal?       @relation(fields: [goalId], references: [id])
+
+  // Tracking
+  logs          HabitLog[]
+
+  // Stats (denormalized for performance)
+  currentStreak Int         @default(0) @map("current_streak")
+  longestStreak Int         @default(0) @map("longest_streak")
+  totalCompletions Int      @default(0) @map("total_completions")
+  consistencyRate Float     @default(0) @map("consistency_rate") // 0-100
+
+  isActive      Boolean     @default(true) @map("is_active")
+  order         Int         @default(0)
+
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@index([userId, isActive])
+  @@index([userId, category])
+  @@map("habits")
+}
+
+enum HabitFrequency {
+  DAILY
+  WEEKLY
+  SPECIFIC_DAYS
+}
+
+model HabitLog {
+  id          String   @id @default(cuid())
+  habitId     String   @map("habit_id")
+  habit       Habit    @relation(fields: [habitId], references: [id], onDelete: Cascade)
+
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date        DateTime @db.Date
+  completed   Boolean  @default(false)
+  count       Int      @default(1) // For quantity-based habits
+  notes       String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([habitId, date])
+  @@index([userId, date])
+  @@map("habit_logs")
+}
+
+// ============================================
+// TIME TRACKING
+// ============================================
+model TimeEntry {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startTime   DateTime @map("start_time")
+  endTime     DateTime? @map("end_time")
+  duration    Int?     // seconds, auto-calculated
+
+  category    String   @default("other") // work, study, coding, reading, exercise, entertainment, social, travel, sleep, other
+  description String?
+
+  // Relationships
+  taskId      String?  @map("task_id")
+  task        Task?    @relation(fields: [taskId], references: [id])
+  projectId   String?  @map("project_id")
+  project     Project? @relation(fields: [projectId], references: [id])
+
+  // Productivity
+  productivityRating Int? @map("productivity_rating") // 1-5
+
+  // Source
+  source      String   @default("manual") // manual, timer, focus_session, study_session, workout
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, startTime])
+  @@index([userId, category])
+  @@map("time_entries")
+}
+
+// ============================================
+// FOCUS SESSIONS
+// ============================================
+model FocusSession {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  startTime       DateTime @map("start_time")
+  endTime         DateTime? @map("end_time")
+  duration        Int?     // seconds
+
+  // Preset used
+  presetName      String   @default("custom") @map("preset_name") // 25/5, 50/10, custom
+  workDuration    Int      @map("work_duration") // seconds
+  breakDuration   Int      @map("break_duration") // seconds
+
+  // Associations
+  taskId          String?  @map("task_id")
+  projectId       String?  @map("project_id")
+
+  // Tracking
+  distractions    Int      @default(0)
+  focusRating     Int?     @map("focus_rating") // 1-5
+
+  // Stats
+  isCompleted     Boolean  @default(false) @map("is_completed")
+
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([userId, startTime])
+  @@map("focus_sessions")
+}
+
+// ============================================
+// EDUCATION
+// ============================================
+model Subject {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  category    String   @default("technical") // technical, language, academic, etc.
+
+  // Progress
+  currentLevel String  @default("beginner") @map("current_level") // beginner, basic, intermediate, advanced, expert
+  targetLevel  String  @default("intermediate") @map("target_level")
+  progress     Float    @default(0) // 0-100
+
+  // Tracking
+  totalStudyHours Float @default(0) @map("total_study_hours")
+
+  // Relationships
+  studySessions StudySession[]
+  courses     Course[]
+  resources   Resource[]
+
+  isActive    Boolean  @default(true) @map("is_active")
+  order       Int      @default(0)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, isActive])
+  @@map("subjects")
+}
+
+model Course {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  platform    String?  // Coursera, Udemy, etc.
+  url         String?
+
+  subjectId   String?  @map("subject_id")
+  subject     Subject? @relation(fields: [subjectId], references: [id])
+
+  status      CourseStatus @default(NOT_STARTED)
+  progress    Float    @default(0) // 0-100
+
+  startDate   DateTime? @map("start_date")
+  endDate     DateTime? @map("end_date")
+
+  totalHours  Float    @default(0) @map("total_hours")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("courses")
+}
+
+enum CourseStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DROPPED
+}
+
+model StudySession {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  subjectId   String   @map("subject_id")
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  startTime   DateTime @map("start_time")
+  endTime     DateTime? @map("end_time")
+  duration    Int?     // seconds
+
+  topic       String?
+  notes       String?
+
+  productivityRating Int? @map("productivity_rating") // 1-5
+  difficulty  Int?     // 1-5
+
+  // Source
+  source      String   @default("manual") // manual, timer, focus_session
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, startTime])
+  @@index([subjectId, startTime])
+  @@map("study_sessions")
+}
+
+model Resource {
+  id          String   @id @default(cuid())
+  subjectId   String   @map("subject_id")
+  subject     Subject  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  title       String
+  type        String   @default("article") // book, article, video, paper, documentation, tool
+  url         String?
+  notes       String?
+  isCompleted Boolean  @default(false) @map("is_completed")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("resources")
+}
+
+// ============================================
+// SKILLS
+// ============================================
+model Skill {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    String   @default("technical") // technical, language, soft_skill, etc.
+
+  currentLevel Int     @default(1) @map("current_level") // 1-5
+  targetLevel  Int     @default(3) @map("target_level") // 1-5
+  importance   Int     @default(3) // 1-5
+
+  totalHours   Float   @default(0) @map("total_hours")
+  lastPracticed DateTime? @map("last_practiced")
+  nextPractice  DateTime? @map("next_practice")
+
+  projects     String? // JSON array of project names
+  resources    String? // JSON array
+  notes        String?
+
+  isActive     Boolean @default(true) @map("is_active")
+  order        Int     @default(0)
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, category])
+  @@map("skills")
+}
+
+// ============================================
+// LANGUAGE LEARNING
+// ============================================
+model LanguageTest {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+
+  language    String   // English, Mandarin, etc.
+  testType    String   @map("test_type") // IELTS, TOEFL, HSK, etc.
+  testDate    DateTime @map("test_date")
+
+  // Scores
+  listening   Float?
+  reading     Float?
+  writing     Float?
+  speaking    Float?
+  overall     Float?
+
+  notes       String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, language])
+  @@map("language_tests")
+}
+
+// ============================================
+// FITNESS
+// ============================================
+model Workout {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  type        String   @default("custom") // push, pull, legs, full_body, cardio, custom
+  date        DateTime @db.Date
+
+  startTime   DateTime? @map("start_time")
+  endTime     DateTime? @map("end_time")
+  duration    Int?     // seconds
+
+  // Stats
+  totalVolume Float    @default(0) @map("total_volume") // kg
+  totalSets   Int      @default(0) @map("total_sets")
+  totalReps   Int      @default(0) @map("total_reps")
+
+  notes       String?
+  rating      Int?     // 1-5
+
+  // Relationships
+  sets        WorkoutSet[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, date])
+  @@map("workouts")
+}
+
+model Exercise {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  category    String   @default("strength") // strength, cardio, mobility, flexibility
+  muscleGroup String?  @map("muscle_group")
+
+  // Personal records (denormalized)
+  maxWeight   Float?   @map("max_weight")
+  maxReps     Int?     @map("max_reps")
+  maxDuration Int?     @map("max_duration") // seconds
+  maxDistance Float?   @map("max_distance") // meters
+
+  notes       String?
+
+  sets        WorkoutSet[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, category])
+  @@map("exercises")
+}
+
+model WorkoutSet {
+  id          String   @id @default(cuid())
+  workoutId   String   @map("workout_id")
+  workout     Workout  @relation(fields: [workoutId], references: [id], onDelete: Cascade)
+
+  exerciseId  String   @map("exercise_id")
+  exercise    Exercise @relation(fields: [exerciseId], references: [id])
+
+  setNumber   Int      @map("set_number")
+  reps        Int?
+  weight      Float?   // kg
+  duration    Int?     // seconds
+  distance    Float?   // meters
+  restSeconds Int?     @map("rest_seconds")
+
+  isPR        Boolean  @default(false) @map("is_pr")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("workout_sets")
+}
+
+// ============================================
+// SLEEP
+// ============================================
+model SleepRecord {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date        DateTime @db.Date
+
+  bedTime     DateTime @map("bed_time")
+  wakeTime    DateTime @map("wake_time")
+  duration    Float    // hours
+
+  quality     Int?     // 1-10
+  consistency Float?   // deviation from target in hours
+
+  // Factors
+  screenTimeBeforeBed Float? @map("screen_time_before_bed") // hours
+  caffeineLate  Boolean? @map("caffeine_late")
+  alcohol       Boolean?
+  stress        Int?     // 1-10
+
+  notes       String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("sleep_records")
+}
+
+// ============================================
+// MOOD & ENERGY
+// ============================================
+model MoodRecord {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date        DateTime @db.Date
+
+  mood        Int?     // 1-10
+  energy      Int?     // 1-10
+  stress      Int?     // 1-10
+  motivation  Int?     // 1-10
+  focus       Int?     // 1-10
+
+  notes       String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, date])
+  @@index([userId, date])
+  @@map("mood_records")
+}
+
+// ============================================
+// JOURNAL
+// ============================================
+model JournalEntry {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date        DateTime @db.Date
+  type        JournalType @default(DAILY)
+
+  title       String?
+  content     String   @db.Text
+
+  tags        String[]
+
+  // For specific types
+  gratitude   String?  // JSON array for gratitude entries
+  lessons     String?  // JSON array
+
+  mood        Int?     // 1-10
+  energy      Int?     // 1-10
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, date])
+  @@index([userId, type])
+  @@map("journal_entries")
+}
+
+enum JournalType {
+  DAILY
+  STUDY
+  WORK
+  IDEAS
+  REFLECTION
+  GRATITUDE
+  LESSONS
+}
+
+// ============================================
+// READING
+// ============================================
+model Book {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  author      String?
+  category    String   @default("non-fiction") // fiction, non-fiction, technical, academic
+
+  status      BookStatus @default(WANT_TO_READ)
+
+  totalPages  Int?     @map("total_pages")
+  currentPage Int      @default(0) @map("current_page")
+  progress    Float    @default(0) // 0-100
+
+  rating      Int?     // 1-5
+  keyLessons  String?  @map("key_lessons") // JSON array
+  notes       String?
+
+  // Tracking
+  totalReadingTime Int @default(0) @map("total_reading_time") // seconds
+  readingSessions ReadingSession[]
+
+  startDate   DateTime? @map("start_date")
+  completedDate DateTime? @map("completed_date")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@map("books")
+}
+
+enum BookStatus {
+  WANT_TO_READ
+  READING
+  COMPLETED
+  ABANDONED
+}
+
+model ReadingSession {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  bookId      String   @map("book_id")
+  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+
+  startTime   DateTime @map("start_time")
+  endTime     DateTime? @map("end_time")
+  duration    Int?     // seconds
+
+  pagesRead   Int      @default(0) @map("pages_read")
+  startPage   Int?     @map("start_page")
+  endPage     Int?     @map("end_page")
+
+  notes       String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("reading_sessions")
+}
+
+// ============================================
+// PROJECTS
+// ============================================
+model Project {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+
+  goalId      String?  @map("goal_id")
+  goal        Goal?    @relation(fields: [goalId], references: [id])
+
+  status      ProjectStatus @default(PLANNING)
+
+  deadline    DateTime?
+
+  // Progress
+  progress    Float    @default(0) // 0-100
+
+  // Tracking
+  totalTimeSpent Int   @default(0) @map("total_time_spent") // seconds
+
+  // Relationships
+  tasks       Task[]
+  timeEntries TimeEntry[]
+  milestones  ProjectMilestone[]
+
+  notes       String?
+  links       String?  // JSON array
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([userId, status])
+  @@map("projects")
+}
+
+enum ProjectStatus {
+  PLANNING
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+model ProjectMilestone {
+  id          String   @id @default(cuid())
+  projectId   String   @map("project_id")
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title       String
+  description String?
+  deadline    DateTime?
+  completedAt DateTime? @map("completed_at")
+  order       Int      @default(0)
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("project_milestones")
+}
+
+// ============================================
+// FINANCE
+// ============================================
+model Expense {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount      Float
+  currency    String   @default("USD")
+  category    String   @default("other") // food, transport, housing, education, entertainment, health, other
+  description String?
+  date        DateTime @db.Date
+
+  isRecurring Boolean  @default(false) @map("is_recurring")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, date])
+  @@index([userId, category])
+  @@map("expenses")
+}
+
+model Income {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  amount      Float
+  currency    String   @default("USD")
+  source      String   @default("salary") // salary, freelance, investment, other
+  description String?
+  date        DateTime @db.Date
+
+  isRecurring Boolean  @default(false) @map("is_recurring")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, date])
+  @@map("incomes")
+}
+
+// ============================================
+// REVIEWS
+// ============================================
+model DailyReview {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  date            DateTime @db.Date
+
+  // Morning check-in
+  sleepDuration   Float?   @map("sleep_duration")
+  sleepQuality    Int?     @map("sleep_quality") // 1-10
+  energy          Int?     // 1-10
+  motivation      Int?     // 1-10
+  morningMood     Int?     @map("morning_mood") // 1-10
+  topPriority     String?  @map("top_priority")
+  topTasks        String?  @map("top_tasks") // JSON array
+  distractions    String?  // JSON array
+
+  // Evening check-in
+  completedTasks  Int?     @map("completed_tasks")
+  missedTasks     Int?     @map("missed_tasks")
+  missedReason    String?  @map("missed_reason")
+  productivity    Int?     // 1-10
+  focusTime       Int?     @map("focus_time") // minutes
+  wastedTime      Int?     @map("wasted_time") // minutes
+  eveningMood     Int?     @map("evening_mood") // 1-10
+  eveningEnergy   Int?     @map("evening_energy") // 1-10
+  stress          Int?     // 1-10
+  discipline      Int?     // 1-10
+  wentWell        String?  @map("went_well")
+  wentBadly       String?  @map("went_badly")
+  learned         String?
+  improveTomorrow String?  @map("improve_tomorrow")
+
+  // Journal
+  journal         String?  @db.Text
+
+  // Calculated scores
+  dailyScore      Int?     @map("daily_score") // 0-100
+  disciplineScore Int?     @map("discipline_score") // 0-100
+  productivityScore Int?   @map("productivity_score") // 0-100
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, date])
+  @@map("daily_reviews")
+}
+
+model WeeklyReview {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  weekStart       DateTime @map("week_start")
+  weekEnd         DateTime @map("week_end")
+
+  wins            String?  // JSON array
+  problems        String?  // JSON array
+
+  // Aggregated data
+  totalStudyHours Float?   @map("total_study_hours")
+  totalWorkouts   Int?     @map("total_workouts")
+  avgSleep        Float?   @map("avg_sleep")
+  avgProductivity Int?     @map("avg_productivity")
+  habitConsistency Float?  @map("habit_consistency")
+  totalFocusTime  Int?     @map("total_focus_time") // minutes
+
+  // Goal progress
+  goalProgress    String?  @map("goal_progress") // JSON
+
+  // Comparison
+  vsLastWeek      String?  @map("vs_last_week") // JSON
+
+  biggestImprovement String? @map("biggest_improvement")
+  biggestWeakness String?  @map("biggest_weakness")
+  nextWeekFocus   String?  @map("next_week_focus")
+
+  reflection      String?  @db.Text
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, weekStart])
+  @@map("weekly_reviews")
+}
+
+model MonthlyReview {
+  id              String   @id @default(cuid())
+  userId          String   @map("user_id")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  month           Int
+  year            Int
+
+  achievements    String?  // JSON array
+  missedGoals     String?  @map("missed_goals") // JSON array
+
+  // Aggregated
+  totalStudyHours Float?   @map("total_study_hours")
+  totalWorkouts   Int?     @map("total_workouts")
+  avgSleep        Float?   @map("avg_sleep")
+  avgProductivity Int?     @map("avg_productivity")
+  booksCompleted  Int?     @map("books_completed")
+  skillsImproved  String?  @map("skills_improved") // JSON array
+  projectsCompleted Int?   @map("projects_completed")
+  goalsAchieved   Int?     @map("goals_achieved")
+  habitConsistency Float?  @map("habit_consistency")
+  avgSleepDuration Float?  @map("avg_sleep_duration")
+
+  // Finance
+  totalIncome     Float?   @map("total_income")
+  totalExpenses   Float?   @map("total_expenses")
+  savingsRate     Float?   @map("savings_rate")
+
+  // Personal growth
+  personalGrowth  String?  @map("personal_growth") @db.Text
+
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, year, month])
+  @@map("monthly_reviews")
+}
+
+// ============================================
+// GAMIFICATION
+// ============================================
+model Achievement {
+  id          String   @id @default(cuid())
+
+  name        String   @unique
+  description String
+  category    String   @default("general") // education, fitness, productivity, discipline, streak
+  icon        String?
+
+  requirement String   // JSON: { type, value, period }
+  xpValue     Int      @default(100) @map("xp_value")
+
+  userAchievements UserAchievement[]
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("achievements")
+}
+
+model UserAchievement {
+  id            String   @id @default(cuid())
+  userId        String   @map("user_id")
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  achievementId String   @map("achievement_id")
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  earnedAt      DateTime @default(now()) @map("earned_at")
+
+  @@unique([userId, achievementId])
+  @@map("user_achievements")
+}
+
+// ============================================
+// NOTIFICATIONS & REMINDERS
+// ============================================
+model Notification {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  message     String
+  type        String   @default("info") // info, success, warning, reminder
+
+  isRead      Boolean  @default(false) @map("is_read")
+
+  link        String?
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model Reminder {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  title       String
+  message     String?
+
+  // Schedule
+  type        String   @default("one_time") // one_time, daily, weekly, custom
+  time        String   // HH:mm
+  days        String?  // JSON array for weekly [0,1,2,3,4,5,6]
+  date        DateTime? @db.Date // For one-time
+
+  // Target
+  entityType  String?  @map("entity_type") // task, habit, goal, study, workout
+  entityId    String?  @map("entity_id")
+
+  isActive    Boolean  @default(true) @map("is_active")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("reminders")
+}
+
+// ============================================
+// TAGS (Global)
+// ============================================
+model Tag {
+  id          String   @id @default(cuid())
+  userId      String   @map("user_id")
+
+  name        String
+  color       String   @default("#6366f1")
+
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, name])
+  @@map("tags")
+}
